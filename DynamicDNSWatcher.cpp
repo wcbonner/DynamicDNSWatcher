@@ -1,3 +1,27 @@
+/////////////////////////////////////////////////////////////////////////////
+// Copyright (C) 2022 William C Bonner
+//
+//	MIT License
+//
+//	Permission is hereby granted, free of charge, to any person obtaining a copy
+//	of this software and associated documentation files(the "Software"), to deal
+//	in the Software without restriction, including without limitation the rights
+//	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//	copies of the Software, and to permit persons to whom the Software is
+//	furnished to do so, subject to the following conditions :
+//
+//	The above copyright notice and this permission notice shall be included in all
+//	copies or substantial portions of the Software.
+//
+//	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+//	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+//	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
+//	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+//	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+//	SOFTWARE.
+//
+/////////////////////////////////////////////////////////////////////////////
 #include <csignal>
 #include <cstdio>
 #include <cstring> //memset
@@ -6,14 +30,76 @@
 #include <netinet/in.h>
 #include <unistd.h> // getopt_long
 #include <getopt.h>
+#include <fstream>
 #include <iostream>
+#include <map>
 #include <string>
 #include <sstream>
 #include <vector>
+#include <utility>
 /////////////////////////////////////////////////////////////////////////////
 static const std::string ProgramVersionString("DynamicDNSWatcher 1.20220802-1 Built " __DATE__ " at " __TIME__);
 int ConsoleVerbosity = 1;
 /////////////////////////////////////////////////////////////////////////////
+std::string timeToISO8601(const time_t& TheTime)
+{
+    std::ostringstream ISOTime;
+    struct tm UTC;
+    if (0 != gmtime_r(&TheTime, &UTC))
+    {
+        ISOTime.fill('0');
+        if (!((UTC.tm_year == 70) && (UTC.tm_mon == 0) && (UTC.tm_mday == 1)))
+        {
+            ISOTime << UTC.tm_year + 1900 << "-";
+            ISOTime.width(2);
+            ISOTime << UTC.tm_mon + 1 << "-";
+            ISOTime.width(2);
+            ISOTime << UTC.tm_mday << "T";
+        }
+        ISOTime.width(2);
+        ISOTime << UTC.tm_hour << ":";
+        ISOTime.width(2);
+        ISOTime << UTC.tm_min << ":";
+        ISOTime.width(2);
+        ISOTime << UTC.tm_sec;
+    }
+    return(ISOTime.str());
+}
+time_t ISO8601totime(const std::string& ISOTime)
+{
+    struct tm UTC;
+    UTC.tm_year = stoi(ISOTime.substr(0, 4)) - 1900;
+    UTC.tm_mon = stoi(ISOTime.substr(5, 2)) - 1;
+    UTC.tm_mday = stoi(ISOTime.substr(8, 2));
+    UTC.tm_hour = stoi(ISOTime.substr(11, 2));
+    UTC.tm_min = stoi(ISOTime.substr(14, 2));
+    UTC.tm_sec = stoi(ISOTime.substr(17, 2));
+    UTC.tm_gmtoff = 0;
+    UTC.tm_isdst = -1;
+    UTC.tm_zone = 0;
+#ifdef _MSC_VER
+    _tzset();
+    _get_daylight(&(UTC.tm_isdst));
+#endif
+# ifdef __USE_MISC
+    time_t timer = timegm(&UTC);
+#else
+    time_t timer = mktime(&UTC);
+    timer -= timezone; // HACK: Works in my initial testing on the raspberry pi, but it's currently not DST
+#endif
+#ifdef _MSC_VER
+    long Timezone_seconds = 0;
+    _get_timezone(&Timezone_seconds);
+    timer -= Timezone_seconds;
+    int DST_hours = 0;
+    _get_daylight(&DST_hours);
+    long DST_seconds = 0;
+    _get_dstbias(&DST_seconds);
+    timer += DST_hours * DST_seconds;
+#else
+#endif
+    return(timer);
+}
 std::string timeToExcelLocal(const time_t& TheTime)
 {
     std::ostringstream ExcelDate;
@@ -43,6 +129,78 @@ std::string getTimeExcelLocal(void)
     std::string rval;
     rval.assign(isostring.begin(), isostring.end());
     return(rval);
+}
+/////////////////////////////////////////////////////////////////////////////
+class MyHostAddress {
+public:
+    MyHostAddress() : SeenFirst(0), SeenLast(0) {};
+    MyHostAddress(const std::string& Address, const time_t& First, const time_t& Last)
+    {
+        address = Address;
+        SeenFirst = First;
+        SeenLast = Last;
+    }
+    std::string GetAddress() const { return(address); };
+    time_t GetFirst() const { return(SeenFirst); };
+    time_t GetLast() const { return(SeenLast); };
+    time_t SetFirst(const time_t Seen) { auto rval = SeenFirst;  SeenFirst = Seen; return(rval); };
+    time_t SetLast(const time_t Seen) { auto rval = SeenLast;  SeenLast = Seen; return(rval); };
+protected:
+    std::string address;
+    time_t SeenFirst;
+    time_t SeenLast;
+};
+void ReadLoggedData(const std::string& filename, std::map<std::string, std::map<std::string, MyHostAddress>>& DNS_Names)
+{
+    std::ifstream TheFile(filename);
+    if (TheFile.is_open())
+    {
+        std::string TheLine;
+        while (std::getline(TheFile, TheLine))
+        {
+            char buffer[1024];
+            if (!TheLine.empty() && (TheLine.size() < sizeof(buffer)))
+            {
+                // minor garbage check looking for corrupt data with no tab characters
+                if (TheLine.find('\t') != std::string::npos)
+                {
+                    TheLine.copy(buffer, TheLine.size());
+                    buffer[TheLine.size()] = '\0';
+                    std::string theHost(strtok(buffer, "\t"));
+                    std::string theAddress(strtok(NULL, "\t"));
+                    std::string the8601First(strtok(NULL, "\t"));
+                    std::string the8601Last(strtok(NULL, "\t"));
+                    time_t theFirst = ISO8601totime(the8601First);
+                    time_t theLast = ISO8601totime(the8601Last);
+                    std::map<std::string, MyHostAddress> TempMap; // empty map to put in map
+                    auto Host = DNS_Names.insert(std::pair<std::string, std::map<std::string, MyHostAddress>>(theHost, TempMap));
+                    MyHostAddress foo(theAddress, theFirst, theLast);
+                    auto Address = Host.first->second.insert(std::pair <std::string, MyHostAddress>(theAddress, foo));
+                    std::cerr << filename << ": " << theHost << " " << theAddress << " " << timeToISO8601(theFirst) << " " << timeToISO8601(theLast) << std::endl;
+                }
+            }
+        }
+        TheFile.close();
+    }
+}
+void WriteLoggedData(const std::string& filename, const std::map<std::string, std::map<std::string, MyHostAddress>> & DNS_Names)
+{
+    std::ofstream TheFile(filename, std::ios_base::out | std::ios_base::trunc | std::ios_base::ate);
+    if (TheFile.is_open())
+    {
+        for (auto FQDN = DNS_Names.begin(); FQDN != DNS_Names.end(); FQDN++)
+        {
+            for (auto address = FQDN->second.begin(); address != FQDN->second.end(); address++)
+            {
+                TheFile << FQDN->first;
+                TheFile << "\t" << address->first;
+                TheFile << "\t" << timeToISO8601(address->second.GetFirst());
+                TheFile << "\t" << timeToISO8601(address->second.GetLast());
+                TheFile << std::endl;
+            }
+        }
+    }
+    TheFile.close();
 }
 /////////////////////////////////////////////////////////////////////////////
 std::vector<std::string> dns_lookup(const std::string& host_name)
@@ -101,13 +259,15 @@ static void usage(int argc, char** argv)
     std::cout << "    -h | --help          Print this message" << std::endl;
     std::cout << "    -v | --verbose level stdout verbosity level [" << ConsoleVerbosity << "]" << std::endl;
     std::cout << "    -n | --name fqdn     Fully Qualified Domain Name to watch" << std::endl;
+    std::cout << "    -f | --file path     Fully Qualified Path Name to store data" << std::endl;
     std::cout << std::endl;
 }
-static const char short_options[] = "hv:n:";
+static const char short_options[] = "hv:n:f:";
 static const struct option long_options[] = {
     { "help",no_argument,			NULL, 'h' },
     { "verbose",required_argument,	NULL, 'v' },
     { "name",required_argument,     NULL, 'n' },
+    { "file",required_argument,     NULL, 'f' },
     { 0, 0, 0, 0 }
 };
 /////////////////////////////////////////////////////////////////////////////
@@ -116,11 +276,13 @@ int main(int argc, char* argv[])
     ///////////////////////////////////////////////////////////////////////////////////////////////
     tzset();
     ///////////////////////////////////////////////////////////////////////////////////////////////
-    std::vector<std::string> DNS_Names_ToWatch;
+    std::map<std::string, std::map<std::string, MyHostAddress>> DNS_Names_ToWatch;    // memory map of Hostnames and their addresses
+    std::string CacheFileName;
     ///////////////////////////////////////////////////////////////////////////////////////////////
     for (;;)
     {
         std::string TempString;
+        std::map<std::string, MyHostAddress> TempMap; // empty map to put in map
         int idx;
         int c = getopt_long(argc, argv, short_options, long_options, &idx);
         if (-1 == c)
@@ -138,7 +300,10 @@ int main(int argc, char* argv[])
             catch (const std::out_of_range& oor) { std::cerr << "Out of Range error: " << oor.what() << std::endl; exit(EXIT_FAILURE); }
             break;
         case 'n':
-            DNS_Names_ToWatch.push_back(std::string(optarg));
+            DNS_Names_ToWatch.insert(std::pair<std::string, std::map<std::string, MyHostAddress>>(std::string(optarg), TempMap));
+            break;
+        case 'f':
+            CacheFileName = std::string(optarg);
             break;
         default:
             usage(argc, argv);
@@ -168,22 +333,37 @@ int main(int argc, char* argv[])
     typedef void (*SignalHandlerPointer)(int);
     SignalHandlerPointer previousHandler = signal(SIGINT, SignalHandlerSIGINT);
     ///////////////////////////////////////////////////////////////////////////////////////////////
+    ReadLoggedData(CacheFileName, DNS_Names_ToWatch);
+    ///////////////////////////////////////////////////////////////////////////////////////////////
     bRun = true;
     while (bRun)
     {
-        time_t LoopStartTime;
-        time(&LoopStartTime);
+        //time_t LoopStartTime;
+        //time(&LoopStartTime);
         for (auto FQDN = DNS_Names_ToWatch.begin(); FQDN != DNS_Names_ToWatch.end(); FQDN++)
-
         {
-            std::cout << "[" << getTimeExcelLocal() << "] " << *FQDN;
-            std::vector<std::string> addresses = dns_lookup(*FQDN);
-            for (auto iter = addresses.begin(); iter != addresses.end(); iter++)
-                std::cout << " " << *iter;
-            std::cout << std::endl;
+            if (ConsoleVerbosity > 0)
+                std::cout << "[" << getTimeExcelLocal() << "] " << FQDN->first;
+            time_t t_now;
+            time(&t_now);
+            std::vector<std::string> addresses = dns_lookup(FQDN->first);
+            for (auto address = addresses.begin(); address != addresses.end(); address++)
+            {
+                if (ConsoleVerbosity > 0)
+                    std::cout << " " << *address;
+                MyHostAddress foo(*address, t_now, t_now);
+                auto Address = FQDN->second.insert(std::pair <std::string, MyHostAddress>(*address, foo));
+                if (Address.second == false)    // Address Already was in map
+                    Address.first->second.SetLast(t_now);
+                else
+                    std::cerr << FQDN->first << " " << *address << std::endl;
+            }
+            if (ConsoleVerbosity > 0)
+                std::cout << std::endl;
         }
         sleep(1 * 60);
     }
+    WriteLoggedData(CacheFileName, DNS_Names_ToWatch);
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // remove our special Ctrl-C signal handler and restore previous one
     signal(SIGINT, previousHandler);
