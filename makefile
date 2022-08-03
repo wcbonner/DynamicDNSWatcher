@@ -4,7 +4,7 @@ DynamicDNSWatcher/usr/local/bin/dynamicdnswatcher: dynamicdnswatcher.o
 	mkdir -p $(shell dirname $@)
 	$(CXX) $? -o$@ -lgps
 
-dynamicdnswatcher.o: DynamicRDNSWatcher.cpp makefile
+dynamicdnswatcher.o: DynamicDNSWatcher.cpp makefile
 	$(CXX) -c -Wno-psabi -O3 -std=c++11 $(CXXFLAGS) $? -o$@
 
 deb: DynamicDNSWatcher/usr/local/bin/dynamicdnswatcher DynamicDNSWatcher/DEBIAN/control DynamicDNSWatcher/usr/local/lib/systemd/system/dynamicdnswatcher.service
