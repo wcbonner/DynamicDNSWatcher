@@ -1,0 +1,6 @@
+#!/bin/sh
+
+echo "$(tput setaf 3) HI I'M A POSTRM SCRIPT `date +"%s"` $(tput sgr0)"
+systemctl daemon-reload
+
+exit 0
