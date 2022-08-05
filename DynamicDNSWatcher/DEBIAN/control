@@ -1,8 +1,8 @@
 Package: DynamicDNSWatcher
-Version: 1.20220803-1
+Version: 1.20220805-1
 Section: custom
 Priority: optional
-Architecture: arm64
+Architecture: armhf
 Essential: no
 Installed-Size: 100
 Maintainer: wcbonner@users.noreply.github.com

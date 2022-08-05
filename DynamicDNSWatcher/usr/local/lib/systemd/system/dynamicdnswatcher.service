@@ -11,7 +11,7 @@ Type=simple
 Restart=always
 RestartSec=10
 Environment=LIBCAMERA_LOG_LEVELS=*:4
-ExecStart=/usr/local/bin/dynamicdnswatcher -v 0 -f /var/run/dynamicdnswatcher.txt
+ExecStart=/usr/local/bin/dynamicdnswatcher -v 0 -f /var/log/dynamicdnswatcher.txt -n WimPi4-Dev.wimsworld.com -n WimPi4-Sola.wimsworld.com -n WimPi4.wimsworld.com -n WimPiZeroW-Hope.wimsworld.com -n WimPiZeroW-Wim.wimsworld.com -n WimPiZeroW.wimsworld.com -n WimsWorld.ddns.net -n WimsWorld.remotewebaccess.com -n www.wimsworld.com
 KillSignal=SIGINT
 
 [Install]
