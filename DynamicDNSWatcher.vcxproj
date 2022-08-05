@@ -78,6 +78,11 @@
     <ClCompile Include="DynamicDNSWatcher.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="DynamicDNSWatcher\DEBIAN\control" />
+    <None Include="DynamicDNSWatcher\DEBIAN\postinst" />
+    <None Include="DynamicDNSWatcher\DEBIAN\postrm" />
+    <None Include="DynamicDNSWatcher\DEBIAN\prerm" />
+    <None Include="DynamicDNSWatcher\usr\local\lib\systemd\system\dynamicdnswatcher.service" />
   </ItemGroup>
   <ItemDefinitionGroup />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
