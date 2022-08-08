@@ -38,7 +38,7 @@
 #include <vector>
 #include <utility>
 /////////////////////////////////////////////////////////////////////////////
-static const std::string ProgramVersionString("DynamicDNSWatcher 1.20220805-1 Built " __DATE__ " at " __TIME__);
+static const std::string ProgramVersionString("DynamicDNSWatcher 1.20220808-1 Built " __DATE__ " at " __TIME__);
 int ConsoleVerbosity = 1;
 /////////////////////////////////////////////////////////////////////////////
 std::string timeToISO8601(const time_t& TheTime)
@@ -245,10 +245,11 @@ void SignalHandlerSIGINT(int signal)
     bRun = false;
     std::cerr << "***************** SIGINT: Caught Ctrl-C, finishing loop and quitting. *****************" << std::endl;
 }
+volatile bool bFlush = false;
 void SignalHandlerSIGHUP(int signal)
 {
-    bRun = false;
-    std::cerr << "***************** SIGHUP: Caught HangUp, finishing loop and quitting. *****************" << std::endl;
+    bFlush = true;
+    std::cerr << "***************** SIGHUP: Caught HangUp, finishing loop and flushing log. *****************" << std::endl;
 }
 /////////////////////////////////////////////////////////////////////////////
 static void usage(int argc, char** argv)
@@ -332,6 +333,7 @@ int main(int argc, char* argv[])
     // Set up CTR-C signal handler
     typedef void (*SignalHandlerPointer)(int);
     SignalHandlerPointer previousHandler = signal(SIGINT, SignalHandlerSIGINT);
+    SignalHandlerPointer previousHUPHandler = signal(SIGHUP, SignalHandlerSIGHUP);
     ///////////////////////////////////////////////////////////////////////////////////////////////
     ReadLoggedData(CacheFileName, DNS_Names_ToWatch);
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -362,9 +364,15 @@ int main(int argc, char* argv[])
                 std::cout << std::endl;
         }
         sleep(1 * 60);
+        if (bFlush)
+        {
+            WriteLoggedData(CacheFileName, DNS_Names_ToWatch);
+            bFlush = false;
+        }
     }
     WriteLoggedData(CacheFileName, DNS_Names_ToWatch);
     ///////////////////////////////////////////////////////////////////////////////////////////////
+    signal(SIGHUP, previousHUPHandler);
     // remove our special Ctrl-C signal handler and restore previous one
     signal(SIGINT, previousHandler);
     ///////////////////////////////////////////////////////////////////////////////////////////////
