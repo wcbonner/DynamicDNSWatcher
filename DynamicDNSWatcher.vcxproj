@@ -83,6 +83,7 @@
     <None Include="DynamicDNSWatcher\DEBIAN\postrm" />
     <None Include="DynamicDNSWatcher\DEBIAN\prerm" />
     <None Include="DynamicDNSWatcher\usr\local\lib\systemd\system\dynamicdnswatcher.service" />
+    <None Include="makefile" />
   </ItemGroup>
   <ItemDefinitionGroup />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
