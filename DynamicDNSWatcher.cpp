@@ -38,7 +38,7 @@
 #include <vector>
 #include <utility>
 /////////////////////////////////////////////////////////////////////////////
-static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221114-3 Built " __DATE__ " at " __TIME__);
+static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221114-4 Built " __DATE__ " at " __TIME__);
 int ConsoleVerbosity = 1;
 /////////////////////////////////////////////////////////////////////////////
 std::string timeToISO8601(const time_t& TheTime)
@@ -217,10 +217,10 @@ void WriteLoggedDataHTML(const std::string& filename, const std::map<std::string
         TheFile << "<body>" << std::endl;
         TheFile << "<table id=\"MyTable\">" << std::endl;
         TheFile << "\t<tr>";
-        TheFile << "<th onclick=sortTable(0)\">Hostname</th>";
-        TheFile << "<th onclick=sortTable(1)\">Address</th>";
-        TheFile << "<th onclick=sortTable(2)\">First Seen</th>";
-        TheFile << "<th onclick=sortTable(3)\">Last Seen</th>";
+        TheFile << "<th onclick=\"sortTable(0)\">Hostname</th>";
+        TheFile << "<th onclick=\"sortTable(1)\">Address</th>";
+        TheFile << "<th onclick=\"sortTable(2)\">First Seen</th>";
+        TheFile << "<th onclick=\"sortTable(3)\">Last Seen</th>";
         TheFile << "</tr>" << std::endl;
         for (auto FQDN = DNS_Names.begin(); FQDN != DNS_Names.end(); FQDN++)
         {
