@@ -38,7 +38,7 @@
 #include <vector>
 #include <utility>
 /////////////////////////////////////////////////////////////////////////////
-static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221114-2 Built " __DATE__ " at " __TIME__);
+static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221114-3 Built " __DATE__ " at " __TIME__);
 int ConsoleVerbosity = 1;
 /////////////////////////////////////////////////////////////////////////////
 std::string timeToISO8601(const time_t& TheTime)
@@ -216,12 +216,12 @@ void WriteLoggedDataHTML(const std::string& filename, const std::map<std::string
         TheFile << "</head>" << std::endl;
         TheFile << "<body>" << std::endl;
         TheFile << "<table id=\"MyTable\">" << std::endl;
-        TheFile << "\t<tr>" << std::endl;
-        TheFile << "\t\t<th onclick=sortTable(0)\">Hostname</th>" << std::endl;
-        TheFile << "\t\t<th onclick=sortTable(1)\">Address</th>" << std::endl;
-        TheFile << "\t\t<th onclick=sortTable(2)\">First Seen</th>" << std::endl;
-        TheFile << "\t\t<th onclick=sortTable(3)\">Last Seen</th>" << std::endl;
-        TheFile << "\t</tr>" << std::endl;
+        TheFile << "\t<tr>";
+        TheFile << "<th onclick=sortTable(0)\">Hostname</th>";
+        TheFile << "<th onclick=sortTable(1)\">Address</th>";
+        TheFile << "<th onclick=sortTable(2)\">First Seen</th>";
+        TheFile << "<th onclick=sortTable(3)\">Last Seen</th>";
+        TheFile << "</tr>" << std::endl;
         for (auto FQDN = DNS_Names.begin(); FQDN != DNS_Names.end(); FQDN++)
         {
             for (auto address = FQDN->second.begin(); address != FQDN->second.end(); address++)
@@ -239,7 +239,7 @@ void WriteLoggedDataHTML(const std::string& filename, const std::map<std::string
         TheFile << "<script>" << std::endl;
         TheFile << "function sortTable(n) {" << std::endl;
         TheFile << "\tvar table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;" << std::endl;
-        TheFile << "\ttable = document.getElementById(\"myTable\");" << std::endl;
+        TheFile << "\ttable = document.getElementById(\"MyTable\");" << std::endl;
         TheFile << "\tswitching = true;" << std::endl;
         TheFile << "\tdir = \"asc\";" << std::endl;
         TheFile << "\twhile (switching) {" << std::endl;
