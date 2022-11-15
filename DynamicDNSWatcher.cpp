@@ -38,7 +38,7 @@
 #include <vector>
 #include <utility>
 /////////////////////////////////////////////////////////////////////////////
-static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221018-1 Built " __DATE__ " at " __TIME__);
+static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221114-1 Built " __DATE__ " at " __TIME__);
 int ConsoleVerbosity = 1;
 /////////////////////////////////////////////////////////////////////////////
 std::string timeToISO8601(const time_t& TheTime)
@@ -203,6 +203,84 @@ void WriteLoggedData(const std::string& filename, const std::map<std::string, st
     TheFile.close();
 }
 /////////////////////////////////////////////////////////////////////////////
+void WriteLoggedDataHTML(const std::string& filename, const std::map<std::string, std::map<std::string, MyHostAddress>>& DNS_Names)
+{
+    std::ofstream TheFile(filename, std::ios_base::out | std::ios_base::trunc | std::ios_base::ate);
+    if (TheFile.is_open())
+    {
+        TheFile << "<!DOCTYPE html>" << std::endl;
+        TheFile << "<html lang=\"en\" xmlns=\"http://www.w3.org/1999/xhtml\">" << std::endl;
+        TheFile << "<head>" << std::endl;
+        TheFile << "\t<meta charset=\"utf-8\" />" << std::endl;
+        TheFile << "\t<title>" << ProgramVersionString << "</title>" << std::endl;
+        TheFile << "</head>" << std::endl;
+        TheFile << "<body>" << std::endl;
+        TheFile << "<table id=\"MyTable\">" << std::endl;
+        TheFile << "\t<tr>" << std::endl;
+        TheFile << "\t\t<th onclick=sortTable(0)\">Hostname</th>" << std::endl;
+        TheFile << "\t\t<th onclick=sortTable(1)\">Address</th>" << std::endl;
+        TheFile << "\t\t<th onclick=sortTable(2)\">First Seen</th>" << std::endl;
+        TheFile << "\t\t<th onclick=sortTable(3)\">Last Seen</th>" << std::endl;
+        TheFile << "\t</tr>" << std::endl;
+        for (auto FQDN = DNS_Names.begin(); FQDN != DNS_Names.end(); FQDN++)
+        {
+            for (auto address = FQDN->second.begin(); address != FQDN->second.end(); address++)
+            {
+                TheFile << "\t<tr>";
+                TheFile << "<td>" << FQDN->first << "</td>";
+                TheFile << "<td>" << address->first << "</td>";
+                TheFile << "<td>" << timeToISO8601(address->second.GetFirst()) << "</td>";
+                TheFile << "<td>" << timeToISO8601(address->second.GetLast()) << "</td>";
+                TheFile << "</tr>" << std::endl;
+            }
+        }
+        TheFile << "</table>" << std::endl;
+
+        TheFile << "<script>" << std::endl;
+        TheFile << "function sortTable(n) {" << std::endl;
+        TheFile << "\tvar table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;" << std::endl;
+        TheFile << "\ttable = document.getElementById(\"myTable\");" << std::endl;
+        TheFile << "\tswitching = true;" << std::endl;
+        TheFile << "\tdir = \"asc\";" << std::endl;
+        TheFile << "\twhile (switching) {" << std::endl;
+        TheFile << "\t\tswitching = false;" << std::endl;
+        TheFile << "\t\trows = table.rows;" << std::endl;
+        TheFile << "\t\tfor (i = 1; i < (rows.length - 1); i++) {" << std::endl;
+        TheFile << "\t\t\tshouldSwitch = false;" << std::endl;
+        TheFile << "\t\t\tx = rows[i].getElementsByTagName(\"TD\")[n];" << std::endl;
+        TheFile << "\t\t\ty = rows[i + 1].getElementsByTagName(\"TD\")[n];" << std::endl;
+        TheFile << "\t\t\tif (dir == \"asc\") {" << std::endl;
+        TheFile << "\t\t\t\tif (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {" << std::endl;
+        TheFile << "\t\t\t\t\tshouldSwitch= true;" << std::endl;
+        TheFile << "\t\t\t\t\tbreak;" << std::endl;
+        TheFile << "\t\t\t\t}" << std::endl;
+        TheFile << "\t\t\t} else if (dir == \"desc\") {" << std::endl;
+        TheFile << "\t\t\t\tif (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {" << std::endl;
+        TheFile << "\t\t\t\t\tshouldSwitch = true;" << std::endl;
+        TheFile << "\t\t\t\t\tbreak;" << std::endl;
+        TheFile << "\t\t\t\t}" << std::endl;
+        TheFile << "\t\t\t}" << std::endl;
+        TheFile << "\t\t}" << std::endl;
+        TheFile << "\t\tif (shouldSwitch) {" << std::endl;
+        TheFile << "\t\t\trows[i].parentNode.insertBefore(rows[i + 1], rows[i]);" << std::endl;
+        TheFile << "\t\t\tswitching = true;" << std::endl;
+        TheFile << "\t\t\tswitchcount ++;" << std::endl;
+        TheFile << "\t\t} else {" << std::endl;
+        TheFile << "\t\t\tif (switchcount == 0 && dir == \"asc\") {" << std::endl;
+        TheFile << "\t\t\t\tdir = \"desc\";" << std::endl;
+        TheFile << "\t\t\t\tswitching = true;" << std::endl;
+        TheFile << "\t\t\t}" << std::endl;
+        TheFile << "\t\t}" << std::endl;
+        TheFile << "\t}" << std::endl;
+        TheFile << "}" << std::endl;
+        TheFile << "</script>" << std::endl;
+
+        TheFile << "</body>" << std::endl;
+        TheFile << "</html>" << std::endl;
+    }
+    TheFile.close();
+}
+/////////////////////////////////////////////////////////////////////////////
 std::vector<std::string> dns_lookup(const std::string& host_name)
 {
     std::vector<std::string> output;
@@ -251,6 +329,11 @@ void SignalHandlerSIGHUP(int signal)
     bFlush = true;
     std::cerr << "***************** SIGHUP: Caught HangUp, finishing loop and flushing log. *****************" << std::endl;
 }
+void SignalHandlerSIGALRM(int signal)
+{
+    bFlush = true;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 static void usage(int argc, char** argv)
 {
@@ -263,12 +346,13 @@ static void usage(int argc, char** argv)
     std::cout << "    -f | --file path     Fully Qualified Path Name to store data" << std::endl;
     std::cout << std::endl;
 }
-static const char short_options[] = "hv:n:f:";
+static const char short_options[] = "hv:n:f:o:";
 static const struct option long_options[] = {
-    { "help",no_argument,			NULL, 'h' },
-    { "verbose",required_argument,	NULL, 'v' },
+    { "help",no_argument,           NULL, 'h' },
+    { "verbose",required_argument,  NULL, 'v' },
     { "name",required_argument,     NULL, 'n' },
     { "file",required_argument,     NULL, 'f' },
+    { "output",required_argument,   NULL, 'o' },
     { 0, 0, 0, 0 }
 };
 /////////////////////////////////////////////////////////////////////////////
@@ -279,6 +363,7 @@ int main(int argc, char* argv[])
     ///////////////////////////////////////////////////////////////////////////////////////////////
     std::map<std::string, std::map<std::string, MyHostAddress>> DNS_Names_ToWatch;    // memory map of Hostnames and their addresses
     std::string CacheFileName;
+    std::string OutputFileName;
     ///////////////////////////////////////////////////////////////////////////////////////////////
     for (;;)
     {
@@ -306,6 +391,9 @@ int main(int argc, char* argv[])
         case 'f':
             CacheFileName = std::string(optarg);
             break;
+        case 'o':
+            OutputFileName = std::string(OutputFileName);
+            break;
         default:
             usage(argc, argv);
             exit(EXIT_FAILURE);
@@ -331,9 +419,10 @@ int main(int argc, char* argv[])
     }
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // Set up CTR-C signal handler
-    typedef void (*SignalHandlerPointer)(int);
-    SignalHandlerPointer previousHandler = signal(SIGINT, SignalHandlerSIGINT);
-    SignalHandlerPointer previousHUPHandler = signal(SIGHUP, SignalHandlerSIGHUP);
+    auto previousHandler = signal(SIGINT, SignalHandlerSIGINT);
+    auto previousHUPHandler = signal(SIGHUP, SignalHandlerSIGHUP);
+    auto previousAlarmHandler = signal(SIGALRM, SignalHandlerSIGALRM);
+    alarm(60 * 60); // one hour
     ///////////////////////////////////////////////////////////////////////////////////////////////
     ReadLoggedData(CacheFileName, DNS_Names_ToWatch);
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -367,11 +456,15 @@ int main(int argc, char* argv[])
         if (bFlush)
         {
             WriteLoggedData(CacheFileName, DNS_Names_ToWatch);
+            if (!OutputFileName.empty())
+                WriteLoggedDataHTML(OutputFileName, DNS_Names_ToWatch);
             bFlush = false;
+            alarm(60 * 60); // one hour
         }
     }
     WriteLoggedData(CacheFileName, DNS_Names_ToWatch);
     ///////////////////////////////////////////////////////////////////////////////////////////////
+    signal(SIGALRM, previousAlarmHandler);
     signal(SIGHUP, previousHUPHandler);
     // remove our special Ctrl-C signal handler and restore previous one
     signal(SIGINT, previousHandler);
