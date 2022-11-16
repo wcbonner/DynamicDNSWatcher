@@ -10,7 +10,6 @@ StartLimitIntervalSec=33
 Type=simple
 Restart=always
 RestartSec=10
-Environment=LIBCAMERA_LOG_LEVELS=*:4
 ExecStart=/usr/local/bin/dynamicdnswatcher -v 0 -f /var/log/dynamicdnswatcher.txt -o /var/www/html/mrtg/dynamicdnswatcher.html
 KillSignal=SIGINT
 
