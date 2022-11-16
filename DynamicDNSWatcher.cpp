@@ -38,7 +38,7 @@
 #include <vector>
 #include <utility>
 /////////////////////////////////////////////////////////////////////////////
-static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221114-4 Built " __DATE__ " at " __TIME__);
+static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221115-1 Built " __DATE__ " at " __TIME__);
 int ConsoleVerbosity = 1;
 /////////////////////////////////////////////////////////////////////////////
 std::string timeToISO8601(const time_t& TheTime)
@@ -215,6 +215,9 @@ void WriteLoggedDataHTML(const std::string& filename, const std::map<std::string
         TheFile << "\t<title>" << ProgramVersionString << "</title>" << std::endl;
         TheFile << "</head>" << std::endl;
         TheFile << "<body>" << std::endl;
+        time_t timer;
+        time(&timer);
+        TheFile << "<p>Current Time: " << timeToISO8601(timer) << "</p>" << std::endl;
         TheFile << "<table id=\"MyTable\">" << std::endl;
         TheFile << "\t<tr>";
         TheFile << "<th onclick=\"sortTable(0)\">Hostname</th>";
