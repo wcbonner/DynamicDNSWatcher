@@ -38,7 +38,7 @@
 #include <vector>
 #include <utility>
 /////////////////////////////////////////////////////////////////////////////
-static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221116-1 Built " __DATE__ " at " __TIME__);
+static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221118-1 Built " __DATE__ " at " __TIME__);
 int ConsoleVerbosity = 1;
 /////////////////////////////////////////////////////////////////////////////
 std::string timeToISO8601(const time_t& TheTime)
@@ -346,15 +346,18 @@ static void usage(int argc, char** argv)
     std::cout << "    -v | --verbose level stdout verbosity level [" << ConsoleVerbosity << "]" << std::endl;
     std::cout << "    -n | --name fqdn     Fully Qualified Domain Name to watch" << std::endl;
     std::cout << "    -f | --file path     Fully Qualified Path Name to store data" << std::endl;
+    std::cout << "    -o | --output path   Fully Qualified Path Name to store html output" << std::endl;
+    std::cout << "    -m | --minutes 5     number of minutes between updating output files" << std::endl;
     std::cout << std::endl;
 }
-static const char short_options[] = "hv:n:f:o:";
+static const char short_options[] = "hv:n:f:o:m:";
 static const struct option long_options[] = {
     { "help",no_argument,           NULL, 'h' },
     { "verbose",required_argument,  NULL, 'v' },
     { "name",required_argument,     NULL, 'n' },
     { "file",required_argument,     NULL, 'f' },
     { "output",required_argument,   NULL, 'o' },
+    { "minutes",required_argument,  NULL, 'm' },
     { 0, 0, 0, 0 }
 };
 /////////////////////////////////////////////////////////////////////////////
@@ -366,6 +369,7 @@ int main(int argc, char* argv[])
     std::map<std::string, std::map<std::string, MyHostAddress>> DNS_Names_ToWatch;    // memory map of Hostnames and their addresses
     std::string CacheFileName;
     std::string OutputFileName;
+    int MinutesBetweenFileWrites = 5;
     ///////////////////////////////////////////////////////////////////////////////////////////////
     for (;;)
     {
@@ -396,6 +400,11 @@ int main(int argc, char* argv[])
         case 'o':
             OutputFileName = std::string(optarg);
             break;
+        case 'm':
+            try { MinutesBetweenFileWrites = std::stoi(optarg); }
+            catch (const std::invalid_argument& ia) { std::cerr << "Invalid argument: " << ia.what() << std::endl; exit(EXIT_FAILURE); }
+            catch (const std::out_of_range& oor) { std::cerr << "Out of Range error: " << oor.what() << std::endl; exit(EXIT_FAILURE); }
+            break;
         default:
             usage(argc, argv);
             exit(EXIT_FAILURE);
@@ -424,7 +433,7 @@ int main(int argc, char* argv[])
     auto previousHandler = signal(SIGINT, SignalHandlerSIGINT);
     auto previousHUPHandler = signal(SIGHUP, SignalHandlerSIGHUP);
     auto previousAlarmHandler = signal(SIGALRM, SignalHandlerSIGALRM);
-    alarm(60 * 60); // one hour
+    alarm(MinutesBetweenFileWrites * 60);
     ///////////////////////////////////////////////////////////////////////////////////////////////
     ReadLoggedData(CacheFileName, DNS_Names_ToWatch);
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -461,7 +470,7 @@ int main(int argc, char* argv[])
             if (!OutputFileName.empty())
                 WriteLoggedDataHTML(OutputFileName, DNS_Names_ToWatch);
             bFlush = false;
-            alarm(60 * 60); // one hour
+            alarm(MinutesBetweenFileWrites * 60);
         }
     }
     WriteLoggedData(CacheFileName, DNS_Names_ToWatch);
