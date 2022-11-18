@@ -38,7 +38,7 @@
 #include <vector>
 #include <utility>
 /////////////////////////////////////////////////////////////////////////////
-static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221118-1 Built " __DATE__ " at " __TIME__);
+static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221118-2 Built " __DATE__ " at " __TIME__);
 int ConsoleVerbosity = 1;
 /////////////////////////////////////////////////////////////////////////////
 std::string timeToISO8601(const time_t& TheTime)
@@ -221,9 +221,9 @@ void WriteLoggedDataHTML(const std::string& filename, const std::map<std::string
         TheFile << "<table id=\"MyTable\">" << std::endl;
         TheFile << "\t<tr>";
         TheFile << "<th onclick=\"sortTable(0)\">Hostname</th>";
-        TheFile << "<th onclick=\"sortTable(1)\">Address</th>";
+        TheFile << "<th onclick=\"sortTable(1)\">Last Seen</th>";
         TheFile << "<th onclick=\"sortTable(2)\">First Seen</th>";
-        TheFile << "<th onclick=\"sortTable(3)\">Last Seen</th>";
+        TheFile << "<th onclick=\"sortTable(3)\">Address</th>";
         TheFile << "</tr>" << std::endl;
         for (auto FQDN = DNS_Names.begin(); FQDN != DNS_Names.end(); FQDN++)
         {
@@ -231,9 +231,9 @@ void WriteLoggedDataHTML(const std::string& filename, const std::map<std::string
             {
                 TheFile << "\t<tr>";
                 TheFile << "<td>" << FQDN->first << "</td>";
-                TheFile << "<td>" << address->first << "</td>";
-                TheFile << "<td>" << timeToISO8601(address->second.GetFirst()) << "</td>";
                 TheFile << "<td>" << timeToISO8601(address->second.GetLast()) << "</td>";
+                TheFile << "<td>" << timeToISO8601(address->second.GetFirst()) << "</td>";
+                TheFile << "<td>" << address->first << "</td>";
                 TheFile << "</tr>" << std::endl;
             }
         }
