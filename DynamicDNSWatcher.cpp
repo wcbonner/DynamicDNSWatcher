@@ -38,7 +38,7 @@
 #include <vector>
 #include <utility>
 /////////////////////////////////////////////////////////////////////////////
-static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221118-2 Built " __DATE__ " at " __TIME__);
+static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221205-1 Built " __DATE__ " at " __TIME__);
 int ConsoleVerbosity = 1;
 /////////////////////////////////////////////////////////////////////////////
 std::string timeToISO8601(const time_t& TheTime)
@@ -133,22 +133,26 @@ std::string getTimeExcelLocal(void)
 /////////////////////////////////////////////////////////////////////////////
 class MyHostAddress {
 public:
-    MyHostAddress() : SeenFirst(0), SeenLast(0) {};
-    MyHostAddress(const std::string& Address, const time_t& First, const time_t& Last)
+    MyHostAddress() : SeenFirst(0), SeenLast(0), PingLast(0) {};
+    MyHostAddress(const std::string& Address, const time_t& First, const time_t& Last, const time_t Ping = 0)
     {
         address = Address;
         SeenFirst = First;
         SeenLast = Last;
+        PingLast = Ping;
     }
     std::string GetAddress() const { return(address); };
     time_t GetFirst() const { return(SeenFirst); };
     time_t GetLast() const { return(SeenLast); };
+    time_t GetPing() const { return(PingLast); };
     time_t SetFirst(const time_t Seen) { auto rval = SeenFirst;  SeenFirst = Seen; return(rval); };
     time_t SetLast(const time_t Seen) { auto rval = SeenLast;  SeenLast = Seen; return(rval); };
+    time_t SetPing(const time_t Ping) { auto rval = PingLast;  PingLast = Ping; return(rval); };
 protected:
     std::string address;
     time_t SeenFirst;
     time_t SeenLast;
+    time_t PingLast;
 };
 void ReadLoggedData(const std::string& filename, std::map<std::string, std::map<std::string, MyHostAddress>>& DNS_Names)
 {
