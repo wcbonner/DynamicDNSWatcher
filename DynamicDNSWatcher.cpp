@@ -28,6 +28,7 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/ip_icmp.h>
 #include <unistd.h> // getopt_long
 #include <getopt.h>
 #include <fstream>
@@ -324,6 +325,251 @@ std::vector<std::string> dns_lookup(const std::string& host_name)
     return(output);
 }
 /////////////////////////////////////////////////////////////////////////////
+
+// https://www.geeksforgeeks.org/ping-in-c/
+// http://tcpipguide.com/free/t_ICMPv6EchoRequestandEchoReplyMessages-2.htm
+// https://cboard.cprogramming.com/c-programming/38408-ipv6-ping-windows-problem-lots-ode.html
+// https://www.tutorialspoint.com/unix_sockets/ip_address_functions.htm
+// Define the Packet Constants
+// ping packet size
+#define PING_PKT_S 64
+#define PING_SLEEP_RATE 1000000
+
+// Gives the timeout delay for receiving packets in seconds
+#define RECV_TIMEOUT 1
+
+// ping packet structure
+struct ping_pkt
+{
+    struct icmphdr hdr;
+    char msg[PING_PKT_S - sizeof(struct icmphdr)];
+};
+
+// Calculating the Check Sum
+unsigned short checksum(void* b, int len)
+{
+    unsigned short* buf = (unsigned short*) b;
+    unsigned int sum = 0;
+
+    for (sum = 0; len > 1; len -= 2)
+        sum += *buf++;
+    if (len == 1)
+        sum += *(unsigned char*)buf;
+    sum = (sum >> 16) + (sum & 0xFFFF);
+    sum += (sum >> 16);
+    unsigned short result = ~sum;
+    return result;
+}
+
+bool send_ping4(const std::string& ping_ip, const std::string& rev_host, const std::string& ping_dom)
+{
+    bool rval = false;
+    std::cout << "[" << getTimeExcelLocal() << "] " << "send_ping4(" << ping_ip << ", " << rev_host << ", " << ping_dom << ");" << std::endl;
+    struct timespec tfs;
+    clock_gettime(CLOCK_MONOTONIC, &tfs);
+    auto ping_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+    if (ping_sockfd < 0)
+        std::cout << "[" << getTimeExcelLocal() << "] " << "Socket file descriptor not received!!" << std::endl;
+    else
+    {
+        // set socket options at ip to TTL and value to 64,
+        // change to what you want by setting ttl_val
+        int ttl_val = 64;
+        if (setsockopt(ping_sockfd, SOL_IP, IP_TTL, &ttl_val, sizeof(ttl_val)) != 0)
+            std::cout << "[" << getTimeExcelLocal() << "] " << "Setting socket options to TTL failed!" << std::endl;
+        else
+        {
+            // setting timeout of recv setting
+            struct timeval tv_out;
+            tv_out.tv_sec = RECV_TIMEOUT;
+            tv_out.tv_usec = 0;
+            setsockopt(ping_sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv_out, sizeof(tv_out));
+
+            int msg_count = 0;
+            int flag = 1;
+            int msg_received_count = 0;
+            // send icmp packet in a loop
+            for (auto pingloop = 5; pingloop > 0; pingloop--)
+            {
+                // flag is whether packet was sent or not
+                flag = 1;
+
+                //filling packet
+                struct ping_pkt pckt;
+                bzero(&pckt, sizeof(pckt));
+                for (auto i = 0; i < sizeof(pckt.msg) - 1; i++)
+                    pckt.msg[i] = i + '0';
+                pckt.msg[sizeof(pckt.msg) - 1] = 0;
+                pckt.hdr.type = ICMP_ECHO;
+                pckt.hdr.un.echo.id = getpid();
+                pckt.hdr.un.echo.sequence = msg_count++;
+                pckt.hdr.checksum = checksum(&pckt, sizeof(pckt));
+
+                usleep(PING_SLEEP_RATE);
+
+                struct timespec time_start;
+                clock_gettime(CLOCK_MONOTONIC, &time_start);
+
+                struct sockaddr_in ping_addr;
+                ping_addr.sin_family = AF_INET;
+                ping_addr.sin_port = htons(0);
+                //ping_addr.sin_addr.s_addr = inet_addr(ping_ip.c_str());
+                inet_pton(AF_INET, ping_ip.c_str(), &ping_addr.sin_addr.s_addr);
+
+                if (sendto(ping_sockfd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&ping_addr, sizeof(ping_addr)) <= 0)
+                {
+                    std::cout << "[" << getTimeExcelLocal() << "] " << "Packet Sending Failed!" << std::endl;
+                    flag = 0;
+                }
+                //receive packet
+                struct sockaddr_in r_addr;
+                auto addr_len = sizeof(r_addr);
+                if (recvfrom(ping_sockfd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&r_addr, (socklen_t*)&addr_len) <= 0 && msg_count > 1)
+                    std::cout << "[" << getTimeExcelLocal() << "] " << "Packet receive failed!" << std::endl;
+                else
+                {
+                    struct timespec time_end;
+                    clock_gettime(CLOCK_MONOTONIC, &time_end);
+
+                    double timeElapsed = ((double)(time_end.tv_nsec - time_start.tv_nsec)) / 1000000.0;
+                    long double rtt_msec = (time_end.tv_sec - time_start.tv_sec) * 1000.0 + timeElapsed;
+
+                    // if packet was not sent, don't receive
+                    if (flag)
+                    {
+                        if (!(pckt.hdr.type == 69 && pckt.hdr.code == 0))
+                            std::cerr << "[" << getTimeExcelLocal() << "] " << "Error..Packet received with ICMP type " << pckt.hdr.type << " code " << pckt.hdr.code << std::endl;
+                        else
+                        {
+                            std::cout << "[" << getTimeExcelLocal() << "] " << PING_PKT_S << " bytes from " << ping_dom << " (h: " << rev_host << ") (" << ping_ip << ") msg_seq=" << msg_count << " ttl=" << ttl_val << " rtt= " << rtt_msec << " ms." << std::endl;
+                            msg_received_count++;
+                        }
+                    }
+                }
+            }
+            rval = msg_received_count > 0;
+            struct timespec tfe;
+            clock_gettime(CLOCK_MONOTONIC, &tfe);
+            double timeElapsed = ((double)(tfe.tv_nsec - tfs.tv_nsec)) / 1000000.0;
+            long double total_msec = (tfe.tv_sec - tfs.tv_sec) * 1000.0 + timeElapsed;
+            std::cout << "[" << getTimeExcelLocal() << "] " << "===" << ping_ip << " ping statistics ===" << std::endl;
+            std::cout << "[" << getTimeExcelLocal() << "] " << msg_count << " packets sent, " << msg_received_count << " packets received, " << ((msg_count - msg_received_count) / msg_count) * 100.0 << " percent packet loss. Total time : " << total_msec << " ms." << std::endl;
+        }
+        close(ping_sockfd);
+    }
+    return(rval);
+}
+
+bool send_ping6(const std::string& ping_ip, const std::string& rev_host, const std::string& ping_dom)
+{
+    bool rval = false;
+    std::cout << "[" << getTimeExcelLocal() << "] " << "send_ping6(" << ping_ip << ", " << rev_host << ", " << ping_dom << ");" << std::endl;
+    struct timespec tfs;
+    clock_gettime(CLOCK_MONOTONIC, &tfs);
+    auto ping_sockfd = socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
+    if (ping_sockfd < 0)
+        std::cout << "[" << getTimeExcelLocal() << "] " << "Socket file descriptor not received!!" << std::endl;
+    else
+    {
+        // set socket options at ip to TTL and value to 64,
+        // change to what you want by setting ttl_val
+        //int ttl_val = 64;
+        //if (setsockopt(ping_sockfd, SOL_IP, IP_TTL, &ttl_val, sizeof(ttl_val)) != 0)
+        //    std::cerr << "[" << getTimeExcelLocal() << "] " << "Setting socket options to TTL failed!" << std::endl;
+        //else
+        //{
+        //    std::cout << "[" << getTimeExcelLocal() << "] " << "Socket set to TTL.." << std::endl;
+
+            // setting timeout of recv setting
+            struct timeval tv_out;
+            tv_out.tv_sec = RECV_TIMEOUT;
+            tv_out.tv_usec = 0;
+            setsockopt(ping_sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv_out, sizeof(tv_out));
+
+            int msg_count = 0;
+            int flag = 1;
+            int msg_received_count = 0;
+            // send icmp packet in a loop
+            for (auto pingloop = 5; pingloop > 0; pingloop--)
+            {
+                // flag is whether packet was sent or not
+                flag = 1;
+
+                //filling packet
+                struct ping_pkt pckt;
+                bzero(&pckt, sizeof(pckt));
+                for (auto i = 0; i < sizeof(pckt.msg) - 1; i++)
+                    pckt.msg[i] = i + '0';
+                pckt.msg[sizeof(pckt.msg) - 1] = 0;
+                pckt.hdr.type = 128;
+                pckt.hdr.un.echo.id = getpid();
+                pckt.hdr.un.echo.sequence = msg_count++;
+                pckt.hdr.checksum = checksum(&pckt, sizeof(pckt));
+
+                usleep(PING_SLEEP_RATE);
+
+                struct timespec time_start;
+                clock_gettime(CLOCK_MONOTONIC, &time_start);
+
+                struct sockaddr_in6 ping_addr;
+                ping_addr.sin6_family = AF_INET6;
+                ping_addr.sin6_port = htons(0);
+                inet_pton(AF_INET6, ping_ip.c_str(), &ping_addr.sin6_addr);
+                if (sendto(ping_sockfd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&ping_addr, sizeof(ping_addr)) <= 0)
+                {
+                    std::cout << "[" << getTimeExcelLocal() << "] " << "Packet Sending Failed!" << std::endl;
+                    flag = 0;
+                }
+
+                //receive packet
+                struct sockaddr_in r_addr;
+                auto addr_len = sizeof(r_addr);
+                if (recvfrom(ping_sockfd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&r_addr, (socklen_t*)&addr_len) <= 0 && msg_count > 1)
+                    std::cout << "[" << getTimeExcelLocal() << "] " << "Packet receive failed!" << std::endl;
+                else
+                {
+                    struct timespec time_end;
+                    clock_gettime(CLOCK_MONOTONIC, &time_end);
+
+                    double timeElapsed = ((double)(time_end.tv_nsec - time_start.tv_nsec)) / 1000000.0;
+                    long double rtt_msec = (time_end.tv_sec - time_start.tv_sec) * 1000.0 + timeElapsed;
+
+                    // if packet was not sent, don't receive
+                    if (flag)
+                    {
+                        if (!(pckt.hdr.type == 129 && pckt.hdr.code == 0))
+                            std::cout << "[" << getTimeExcelLocal() << "] " << "Error..Packet received with ICMP type " << int(pckt.hdr.type) << " code " << pckt.hdr.code << std::endl;
+                        else
+                        {
+                            std::cout << "[" << getTimeExcelLocal() << "] " << PING_PKT_S << " bytes from " << ping_dom << " (h: " << rev_host << ") (" << ping_ip << ") msg_seq=" << msg_count << " ttl=" << "ttl_val" << " rtt= " << rtt_msec << " ms." << std::endl;
+                            msg_received_count++;
+                        }
+                    }
+                }
+            }
+            rval = msg_received_count > 0;
+            struct timespec tfe;
+            clock_gettime(CLOCK_MONOTONIC, &tfe);
+            double timeElapsed = ((double)(tfe.tv_nsec - tfs.tv_nsec)) / 1000000.0;
+            long double total_msec = (tfe.tv_sec - tfs.tv_sec) * 1000.0 + timeElapsed;
+            std::cout << "[" << getTimeExcelLocal() << "] " << "===" << ping_ip << " ping statistics ===" << std::endl;
+            std::cout << "[" << getTimeExcelLocal() << "] " << msg_count << " packets sent, " << msg_received_count << " packets received, " << ((msg_count - msg_received_count) / msg_count) * 100.0 << " percent packet loss. Total time : " << total_msec << " ms." << std::endl;
+        //}
+        close(ping_sockfd);
+    }
+    return(rval);
+}
+// make a ping request
+bool send_ping(const std::string& ping_ip, const std::string& rev_host, const std::string& ping_dom)
+{
+    bool rval = false;
+    if (ping_ip.find('.') == std::string::npos)
+        rval = send_ping6(ping_ip, rev_host, ping_dom);
+    else 
+        rval = send_ping4(ping_ip, rev_host, ping_dom);
+    return(rval);
+}
+/////////////////////////////////////////////////////////////////////////////
 volatile bool bRun = true; // This is declared volatile so that the compiler won't optimized it out of loops later in the code
 void SignalHandlerSIGINT(int signal)
 {
@@ -463,6 +709,8 @@ int main(int argc, char* argv[])
                     Address.first->second.SetLast(t_now);
                 else
                     std::cerr << FQDN->first << " " << *address << std::endl;
+                if (send_ping(*address, FQDN->first, "wimsworld.com"))
+                    Address.first->second.SetPing(t_now);
             }
             if (ConsoleVerbosity > 0)
                 std::cout << std::endl;
