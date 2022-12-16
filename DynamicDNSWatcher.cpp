@@ -29,6 +29,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/ip_icmp.h>
+#include <netinet/icmp6.h>
 #include <unistd.h> // getopt_long
 #include <getopt.h>
 #include <fstream>
@@ -39,7 +40,7 @@
 #include <vector>
 #include <utility>
 /////////////////////////////////////////////////////////////////////////////
-static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221205-1 Built " __DATE__ " at " __TIME__);
+static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221216-1 Built " __DATE__ " at " __TIME__);
 int ConsoleVerbosity = 1;
 /////////////////////////////////////////////////////////////////////////////
 std::string timeToISO8601(const time_t& TheTime)
@@ -330,6 +331,9 @@ std::vector<std::string> dns_lookup(const std::string& host_name)
 // http://tcpipguide.com/free/t_ICMPv6EchoRequestandEchoReplyMessages-2.htm
 // https://cboard.cprogramming.com/c-programming/38408-ipv6-ping-windows-problem-lots-ode.html
 // https://www.tutorialspoint.com/unix_sockets/ip_address_functions.htm
+// https://en.wikipedia.org/wiki/ICMPv6
+// https://github.com/octo/liboping/blob/master/src/liboping.c
+// https://pall.as/icmpv6-and-ipv6-neighborships/
 // Define the Packet Constants
 // ping packet size
 #define PING_PKT_S 64
@@ -361,24 +365,37 @@ unsigned short checksum(void* b, int len)
     return result;
 }
 
-bool send_ping4(const std::string& ping_ip, const std::string& rev_host, const std::string& ping_dom)
+bool send_ping4(const std::string& ping_ip, const std::string& HostName4Output, const bool bOutput = false)
 {
     bool rval = false;
-    std::cout << "[" << getTimeExcelLocal() << "] " << "send_ping4(" << ping_ip << ", " << rev_host << ", " << ping_dom << ");" << std::endl;
+    if (bOutput)
+        std::cout << "[" << getTimeExcelLocal() << "] " << "send_ping4(" << ping_ip << ", " << HostName4Output << ");" << std::endl;
     struct timespec tfs;
     clock_gettime(CLOCK_MONOTONIC, &tfs);
     auto ping_sockfd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     if (ping_sockfd < 0)
-        std::cout << "[" << getTimeExcelLocal() << "] " << "Socket file descriptor not received!!" << std::endl;
+    {
+        if (bOutput)
+            std::cout << "[" << getTimeExcelLocal() << "] " << "Socket file descriptor not received!!" << std::endl;
+    }
     else
     {
         // set socket options at ip to TTL and value to 64,
         // change to what you want by setting ttl_val
         int ttl_val = 64;
         if (setsockopt(ping_sockfd, SOL_IP, IP_TTL, &ttl_val, sizeof(ttl_val)) != 0)
-            std::cout << "[" << getTimeExcelLocal() << "] " << "Setting socket options to TTL failed!" << std::endl;
+        {
+            if (bOutput)
+                std::cout << "[" << getTimeExcelLocal() << "] " << "Setting socket options to TTL failed!" << std::endl;
+        }
         else
         {
+            const int one = 1;
+            /* Enable receiving the TOS field */
+            setsockopt(ping_sockfd, IPPROTO_IP, IP_RECVTOS, &one, sizeof(one));
+            /* Enable receiving the TTL field */
+            setsockopt(ping_sockfd, IPPROTO_IP, IP_RECVTTL, &one, sizeof(one));
+
             // setting timeout of recv setting
             struct timeval tv_out;
             tv_out.tv_sec = RECV_TIMEOUT;
@@ -389,7 +406,7 @@ bool send_ping4(const std::string& ping_ip, const std::string& rev_host, const s
             int flag = 1;
             int msg_received_count = 0;
             // send icmp packet in a loop
-            for (auto pingloop = 5; pingloop > 0; pingloop--)
+            for (auto pingloop = 4; pingloop > 0; pingloop--)
             {
                 // flag is whether packet was sent or not
                 flag = 1;
@@ -418,14 +435,18 @@ bool send_ping4(const std::string& ping_ip, const std::string& rev_host, const s
 
                 if (sendto(ping_sockfd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&ping_addr, sizeof(ping_addr)) <= 0)
                 {
-                    std::cout << "[" << getTimeExcelLocal() << "] " << "Packet Sending Failed!" << std::endl;
+                    if (bOutput)
+                        std::cout << "[" << getTimeExcelLocal() << "] " << "Packet Sending Failed!" << std::endl;
                     flag = 0;
                 }
                 //receive packet
                 struct sockaddr_in r_addr;
                 auto addr_len = sizeof(r_addr);
                 if (recvfrom(ping_sockfd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&r_addr, (socklen_t*)&addr_len) <= 0 && msg_count > 1)
-                    std::cout << "[" << getTimeExcelLocal() << "] " << "Packet receive failed!" << std::endl;
+                {
+                    if (bOutput)
+                        std::cout << "[" << getTimeExcelLocal() << "] " << "Packet receive failed!" << std::endl;
+                }
                 else
                 {
                     struct timespec time_end;
@@ -438,10 +459,16 @@ bool send_ping4(const std::string& ping_ip, const std::string& rev_host, const s
                     if (flag)
                     {
                         if (!(pckt.hdr.type == 69 && pckt.hdr.code == 0))
-                            std::cerr << "[" << getTimeExcelLocal() << "] " << "Error..Packet received with ICMP type " << pckt.hdr.type << " code " << pckt.hdr.code << std::endl;
+                        {
+                            if (bOutput)
+                                std::cerr << "[" << getTimeExcelLocal() << "] " << "Error..Packet received with ICMP type " << int(pckt.hdr.type) << " code " << int(pckt.hdr.code) << std::endl;
+                        }
                         else
                         {
-                            std::cout << "[" << getTimeExcelLocal() << "] " << PING_PKT_S << " bytes from " << ping_dom << " (h: " << rev_host << ") (" << ping_ip << ") msg_seq=" << msg_count << " ttl=" << ttl_val << " rtt= " << rtt_msec << " ms." << std::endl;
+                            char szAddr[NI_MAXHOST] = { 0 };
+                            inet_ntop(AF_INET, &r_addr.sin_addr, szAddr, sizeof(szAddr));
+                            if (bOutput)
+                                std::cout << "[" << getTimeExcelLocal() << "] " << PING_PKT_S << " bytes from (" << szAddr << ") (" << HostName4Output << ") msg_seq=" << msg_count << " ttl=" << ttl_val << " rtt= " << rtt_msec << " ms." << std::endl;
                             msg_received_count++;
                         }
                     }
@@ -452,33 +479,44 @@ bool send_ping4(const std::string& ping_ip, const std::string& rev_host, const s
             clock_gettime(CLOCK_MONOTONIC, &tfe);
             double timeElapsed = ((double)(tfe.tv_nsec - tfs.tv_nsec)) / 1000000.0;
             long double total_msec = (tfe.tv_sec - tfs.tv_sec) * 1000.0 + timeElapsed;
-            std::cout << "[" << getTimeExcelLocal() << "] " << "===" << ping_ip << " ping statistics ===" << std::endl;
-            std::cout << "[" << getTimeExcelLocal() << "] " << msg_count << " packets sent, " << msg_received_count << " packets received, " << ((msg_count - msg_received_count) / msg_count) * 100.0 << " percent packet loss. Total time : " << total_msec << " ms." << std::endl;
+            if (bOutput)
+                std::cout << "[" << getTimeExcelLocal() << "] " << "=== " << ping_ip << " ping statistics === " << msg_count << " packets sent, " << msg_received_count << " packets received, " << ((msg_count - msg_received_count) / msg_count) * 100.0 << " percent packet loss. Total time : " << total_msec << " ms." << std::endl;
         }
         close(ping_sockfd);
     }
     return(rval);
 }
 
-bool send_ping6(const std::string& ping_ip, const std::string& rev_host, const std::string& ping_dom)
+bool send_ping6(const std::string& ping_ip, const std::string& HostName4Output, const bool bOutput = false)
 {
     bool rval = false;
-    std::cout << "[" << getTimeExcelLocal() << "] " << "send_ping6(" << ping_ip << ", " << rev_host << ", " << ping_dom << ");" << std::endl;
+    if (bOutput)
+        std::cout << "[" << getTimeExcelLocal() << "] " << "send_ping6(" << ping_ip << ", " << HostName4Output << ");" << std::endl;
     struct timespec tfs;
     clock_gettime(CLOCK_MONOTONIC, &tfs);
     auto ping_sockfd = socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
     if (ping_sockfd < 0)
-        std::cout << "[" << getTimeExcelLocal() << "] " << "Socket file descriptor not received!!" << std::endl;
+    {
+        if (bOutput)
+            std::cout << "[" << getTimeExcelLocal() << "] " << "Socket file descriptor not received!!" << std::endl;
+    }
     else
     {
         // set socket options at ip to TTL and value to 64,
         // change to what you want by setting ttl_val
-        //int ttl_val = 64;
-        //if (setsockopt(ping_sockfd, SOL_IP, IP_TTL, &ttl_val, sizeof(ttl_val)) != 0)
-        //    std::cerr << "[" << getTimeExcelLocal() << "] " << "Setting socket options to TTL failed!" << std::endl;
-        //else
-        //{
-        //    std::cout << "[" << getTimeExcelLocal() << "] " << "Socket set to TTL.." << std::endl;
+        int ttl_val = 64;
+        if (setsockopt(ping_sockfd, IPPROTO_IPV6, IPV6_UNICAST_HOPS, &ttl_val, sizeof(ttl_val)) != 0)
+        {
+            if (bOutput)
+                std::cerr << "[" << getTimeExcelLocal() << "] " << "Setting socket options to TTL failed!" << std::endl;
+        }
+        else
+        {
+            const int one = 1;
+            /* For details see RFC 3542, section 6.3. */
+            setsockopt(ping_sockfd, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, &one, sizeof(one));
+            /* For details see RFC 3542, section 6.5. */
+            setsockopt(ping_sockfd, IPPROTO_IPV6, IPV6_RECVTCLASS, &one, sizeof(one));
 
             // setting timeout of recv setting
             struct timeval tv_out;
@@ -490,7 +528,7 @@ bool send_ping6(const std::string& ping_ip, const std::string& rev_host, const s
             int flag = 1;
             int msg_received_count = 0;
             // send icmp packet in a loop
-            for (auto pingloop = 5; pingloop > 0; pingloop--)
+            for (auto pingloop = 4; pingloop > 0; pingloop--)
             {
                 // flag is whether packet was sent or not
                 flag = 1;
@@ -501,7 +539,7 @@ bool send_ping6(const std::string& ping_ip, const std::string& rev_host, const s
                 for (auto i = 0; i < sizeof(pckt.msg) - 1; i++)
                     pckt.msg[i] = i + '0';
                 pckt.msg[sizeof(pckt.msg) - 1] = 0;
-                pckt.hdr.type = 128;
+                pckt.hdr.type = ICMP6_ECHO_REQUEST;
                 pckt.hdr.un.echo.id = getpid();
                 pckt.hdr.un.echo.sequence = msg_count++;
                 pckt.hdr.checksum = checksum(&pckt, sizeof(pckt));
@@ -517,15 +555,19 @@ bool send_ping6(const std::string& ping_ip, const std::string& rev_host, const s
                 inet_pton(AF_INET6, ping_ip.c_str(), &ping_addr.sin6_addr);
                 if (sendto(ping_sockfd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&ping_addr, sizeof(ping_addr)) <= 0)
                 {
-                    std::cout << "[" << getTimeExcelLocal() << "] " << "Packet Sending Failed!" << std::endl;
+                    if (bOutput)
+                        std::cout << "[" << getTimeExcelLocal() << "] " << "Packet Sending Failed!" << std::endl;
                     flag = 0;
                 }
 
                 //receive packet
-                struct sockaddr_in r_addr;
+                struct sockaddr_in6 r_addr;
                 auto addr_len = sizeof(r_addr);
                 if (recvfrom(ping_sockfd, &pckt, sizeof(pckt), 0, (struct sockaddr*)&r_addr, (socklen_t*)&addr_len) <= 0 && msg_count > 1)
-                    std::cout << "[" << getTimeExcelLocal() << "] " << "Packet receive failed!" << std::endl;
+                {
+                    if (bOutput)
+                        std::cout << "[" << getTimeExcelLocal() << "] " << "Packet receive failed!" << std::endl;
+                }
                 else
                 {
                     struct timespec time_end;
@@ -537,11 +579,17 @@ bool send_ping6(const std::string& ping_ip, const std::string& rev_host, const s
                     // if packet was not sent, don't receive
                     if (flag)
                     {
-                        if (!(pckt.hdr.type == 129 && pckt.hdr.code == 0))
-                            std::cout << "[" << getTimeExcelLocal() << "] " << "Error..Packet received with ICMP type " << int(pckt.hdr.type) << " code " << pckt.hdr.code << std::endl;
+                        char szAddr[NI_MAXHOST] = { 0 };
+                        inet_ntop(AF_INET6, &r_addr.sin6_addr, szAddr, sizeof(szAddr));
+                        if (!(pckt.hdr.type == ICMP6_ECHO_REPLY && pckt.hdr.code == 0))
+                        {
+                            if (bOutput)
+                                std::cout << "[" << getTimeExcelLocal() << "] " << "Error..Packet received from (" << szAddr << ") with ICMP type " << int(pckt.hdr.type) << " code " << int(pckt.hdr.code) << std::endl;
+                        }
                         else
                         {
-                            std::cout << "[" << getTimeExcelLocal() << "] " << PING_PKT_S << " bytes from " << ping_dom << " (h: " << rev_host << ") (" << ping_ip << ") msg_seq=" << msg_count << " ttl=" << "ttl_val" << " rtt= " << rtt_msec << " ms." << std::endl;
+                            if (bOutput)
+                                std::cout << "[" << getTimeExcelLocal() << "] " << PING_PKT_S << " bytes from (" << szAddr << ") (" << HostName4Output << ") msg_seq=" << msg_count << " ttl=" << "ttl_val" << " rtt= " << rtt_msec << " ms." << std::endl;
                             msg_received_count++;
                         }
                     }
@@ -552,21 +600,21 @@ bool send_ping6(const std::string& ping_ip, const std::string& rev_host, const s
             clock_gettime(CLOCK_MONOTONIC, &tfe);
             double timeElapsed = ((double)(tfe.tv_nsec - tfs.tv_nsec)) / 1000000.0;
             long double total_msec = (tfe.tv_sec - tfs.tv_sec) * 1000.0 + timeElapsed;
-            std::cout << "[" << getTimeExcelLocal() << "] " << "===" << ping_ip << " ping statistics ===" << std::endl;
-            std::cout << "[" << getTimeExcelLocal() << "] " << msg_count << " packets sent, " << msg_received_count << " packets received, " << ((msg_count - msg_received_count) / msg_count) * 100.0 << " percent packet loss. Total time : " << total_msec << " ms." << std::endl;
-        //}
+            if (bOutput)
+                std::cout << "[" << getTimeExcelLocal() << "] " << "=== " << ping_ip << " ping statistics === " << msg_count << " packets sent, " << msg_received_count << " packets received, " << ((msg_count - msg_received_count) / msg_count) * 100.0 << " percent packet loss. Total time : " << total_msec << " ms." << std::endl;
+        }
         close(ping_sockfd);
     }
     return(rval);
 }
 // make a ping request
-bool send_ping(const std::string& ping_ip, const std::string& rev_host, const std::string& ping_dom)
+bool send_ping(const std::string& ping_ip, const std::string& HostName4Output, const bool bOutput = false)
 {
     bool rval = false;
     if (ping_ip.find('.') == std::string::npos)
-        rval = send_ping6(ping_ip, rev_host, ping_dom);
+        rval = send_ping6(ping_ip, HostName4Output, bOutput);
     else 
-        rval = send_ping4(ping_ip, rev_host, ping_dom);
+        rval = send_ping4(ping_ip, HostName4Output, bOutput);
     return(rval);
 }
 /////////////////////////////////////////////////////////////////////////////
@@ -709,7 +757,7 @@ int main(int argc, char* argv[])
                     Address.first->second.SetLast(t_now);
                 else
                     std::cerr << FQDN->first << " " << *address << std::endl;
-                if (send_ping(*address, FQDN->first, "wimsworld.com"))
+                if (send_ping(*address, FQDN->first, (ConsoleVerbosity > 0)))
                     Address.first->second.SetPing(t_now);
             }
             if (ConsoleVerbosity > 0)

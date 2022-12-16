@@ -1,5 +1,5 @@
 Package: DynamicDNSWatcher
-Version: 1.20221205-1
+Version: 1.20221216-1
 Section: custom
 Priority: optional
 Architecture: armhf
