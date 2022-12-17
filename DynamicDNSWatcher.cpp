@@ -69,6 +69,8 @@ std::string timeToISO8601(const time_t& TheTime)
 }
 time_t ISO8601totime(const std::string& ISOTime)
 {
+    if (ISOTime.length() < 19)
+        return(0);
     struct tm UTC;
     UTC.tm_year = stoi(ISOTime.substr(0, 4)) - 1900;
     UTC.tm_mon = stoi(ISOTime.substr(5, 2)) - 1;
@@ -176,13 +178,16 @@ void ReadLoggedData(const std::string& filename, std::map<std::string, std::map<
                     std::string theAddress(strtok(NULL, "\t"));
                     std::string the8601First(strtok(NULL, "\t"));
                     std::string the8601Last(strtok(NULL, "\t"));
+                    std::string the8601Ping;
+                    char* myToken = strtok(NULL, "\t"); if (myToken != NULL) the8601Ping = *myToken;
                     time_t theFirst = ISO8601totime(the8601First);
                     time_t theLast = ISO8601totime(the8601Last);
+                    time_t thePing = ISO8601totime(the8601Ping);
                     std::map<std::string, MyHostAddress> TempMap; // empty map to put in map
                     auto Host = DNS_Names.insert(std::pair<std::string, std::map<std::string, MyHostAddress>>(theHost, TempMap));
-                    MyHostAddress foo(theAddress, theFirst, theLast);
+                    MyHostAddress foo(theAddress, theFirst, theLast, thePing);
                     auto Address = Host.first->second.insert(std::pair <std::string, MyHostAddress>(theAddress, foo));
-                    std::cerr << filename << ": " << theHost << " " << theAddress << " " << timeToISO8601(theFirst) << " " << timeToISO8601(theLast) << std::endl;
+                    std::cerr << filename << ": " << theHost << " " << theAddress << " " << timeToISO8601(theFirst) << " " << timeToISO8601(theLast) << " " << timeToISO8601(thePing) << std::endl;
                 }
             }
         }
@@ -202,6 +207,7 @@ void WriteLoggedData(const std::string& filename, const std::map<std::string, st
                 TheFile << "\t" << address->first;
                 TheFile << "\t" << timeToISO8601(address->second.GetFirst());
                 TheFile << "\t" << timeToISO8601(address->second.GetLast());
+                TheFile << "\t" << timeToISO8601(address->second.GetPing());
                 TheFile << std::endl;
             }
         }
@@ -230,6 +236,7 @@ void WriteLoggedDataHTML(const std::string& filename, const std::map<std::string
         TheFile << "<th onclick=\"sortTable(1)\">Last Seen</th>";
         TheFile << "<th onclick=\"sortTable(2)\">First Seen</th>";
         TheFile << "<th onclick=\"sortTable(3)\">Address</th>";
+        TheFile << "<th onclick=\"sortTable(4)\">Last Ping</th>";
         TheFile << "</tr>" << std::endl;
         for (auto FQDN = DNS_Names.begin(); FQDN != DNS_Names.end(); FQDN++)
         {
@@ -240,6 +247,7 @@ void WriteLoggedDataHTML(const std::string& filename, const std::map<std::string
                 TheFile << "<td>" << timeToISO8601(address->second.GetLast()) << "</td>";
                 TheFile << "<td>" << timeToISO8601(address->second.GetFirst()) << "</td>";
                 TheFile << "<td>" << address->first << "</td>";
+                TheFile << "<td>" << timeToISO8601(address->second.GetPing()) << "</td>";
                 TheFile << "</tr>" << std::endl;
             }
         }
@@ -512,11 +520,17 @@ bool send_ping6(const std::string& ping_ip, const std::string& HostName4Output, 
         }
         else
         {
-            const int one = 1;
+            //const int one = 1;
             /* For details see RFC 3542, section 6.3. */
-            setsockopt(ping_sockfd, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, &one, sizeof(one));
+            //setsockopt(ping_sockfd, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, &one, sizeof(one));
             /* For details see RFC 3542, section 6.5. */
-            setsockopt(ping_sockfd, IPPROTO_IPV6, IPV6_RECVTCLASS, &one, sizeof(one));
+            //setsockopt(ping_sockfd, IPPROTO_IPV6, IPV6_RECVTCLASS, &one, sizeof(one));
+
+            // the filtering is copied from: https://git.busybox.net/busybox/tree/networking/ping.c
+            struct icmp6_filter filt;
+            ICMP6_FILTER_SETBLOCKALL(&filt);
+            ICMP6_FILTER_SETPASS(ICMP6_ECHO_REPLY, &filt);
+            setsockopt(ping_sockfd, IPPROTO_ICMPV6, ICMP6_FILTER, &filt, sizeof(filt));
 
             // setting timeout of recv setting
             struct timeval tv_out;
@@ -758,7 +772,11 @@ int main(int argc, char* argv[])
                 else
                     std::cerr << FQDN->first << " " << *address << std::endl;
                 if (send_ping(*address, FQDN->first, (ConsoleVerbosity > 0)))
+                {
                     Address.first->second.SetPing(t_now);
+                    if (ConsoleVerbosity > 0)
+                        std::cout << " Ping=True";
+                }
             }
             if (ConsoleVerbosity > 0)
                 std::cout << std::endl;
