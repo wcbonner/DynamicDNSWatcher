@@ -40,30 +40,33 @@
 #include <vector>
 #include <utility>
 /////////////////////////////////////////////////////////////////////////////
-static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221216-1 Built " __DATE__ " at " __TIME__);
+static const std::string ProgramVersionString("DynamicDNSWatcher 1.20221217-1 Built " __DATE__ " at " __TIME__);
 int ConsoleVerbosity = 1;
 /////////////////////////////////////////////////////////////////////////////
 std::string timeToISO8601(const time_t& TheTime)
 {
     std::ostringstream ISOTime;
-    struct tm UTC;
-    if (0 != gmtime_r(&TheTime, &UTC))
+    if (TheTime > 0)
     {
-        ISOTime.fill('0');
-        if (!((UTC.tm_year == 70) && (UTC.tm_mon == 0) && (UTC.tm_mday == 1)))
+        struct tm UTC;
+        if (0 != gmtime_r(&TheTime, &UTC))
         {
-            ISOTime << UTC.tm_year + 1900 << "-";
+            ISOTime.fill('0');
+            if (!((UTC.tm_year == 70) && (UTC.tm_mon == 0) && (UTC.tm_mday == 1)))
+            {
+                ISOTime << UTC.tm_year + 1900 << "-";
+                ISOTime.width(2);
+                ISOTime << UTC.tm_mon + 1 << "-";
+                ISOTime.width(2);
+                ISOTime << UTC.tm_mday << "T";
+            }
             ISOTime.width(2);
-            ISOTime << UTC.tm_mon + 1 << "-";
+            ISOTime << UTC.tm_hour << ":";
             ISOTime.width(2);
-            ISOTime << UTC.tm_mday << "T";
+            ISOTime << UTC.tm_min << ":";
+            ISOTime.width(2);
+            ISOTime << UTC.tm_sec;
         }
-        ISOTime.width(2);
-        ISOTime << UTC.tm_hour << ":";
-        ISOTime.width(2);
-        ISOTime << UTC.tm_min << ":";
-        ISOTime.width(2);
-        ISOTime << UTC.tm_sec;
     }
     return(ISOTime.str());
 }
@@ -226,6 +229,10 @@ void WriteLoggedDataHTML(const std::string& filename, const std::map<std::string
         TheFile << "\t<meta charset=\"utf-8\" />" << std::endl;
         TheFile << "\t<title>" << ProgramVersionString << "</title>" << std::endl;
         TheFile << "</head>" << std::endl;
+        TheFile << "\t<style>" << std::endl;
+        TheFile << "\t\tth, td {border-style: inset;}" << std::endl;
+        TheFile << "\t\ttr:hover {background-color: #D6EEEE;}" << std::endl;
+        TheFile << "\t</style>" << std::endl;
         TheFile << "<body>" << std::endl;
         time_t timer;
         time(&timer);
