@@ -10,7 +10,7 @@ StartLimitIntervalSec=33
 Type=simple
 Restart=always
 RestartSec=10
-ExecStart=/usr/local/bin/dynamicdnswatcher -v 0 -f /var/log/dynamicdnswatcher.txt -o /var/www/html/dynamicdnswatcher.html
+ExecStart=/usr/local/bin/dynamicdnswatcher -v 0 -f /var/log/dynamicdnswatcher.txt -o /var/www/html/dynamicdnswatcher-%H.html
 KillSignal=SIGINT
 
 [Install]
