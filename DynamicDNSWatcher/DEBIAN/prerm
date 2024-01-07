@@ -1,0 +1,7 @@
+#!/bin/sh
+
+echo "$(tput setaf 3) HI I'M A PRERM SCRIPT `date +"%s"` $(tput sgr0)"
+systemctl stop dynamicdnswatcher.service
+systemctl disable dynamicdnswatcher.service
+
+exit 0

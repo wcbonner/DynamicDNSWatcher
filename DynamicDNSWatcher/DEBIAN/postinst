@@ -1,0 +1,8 @@
+#!/bin/sh
+
+echo "$(tput setaf 3) HI I'M A POSTINST SCRIPT `date +"%s"`$(tput sgr0)"
+systemctl daemon-reload
+systemctl enable dynamicdnswatcher.service
+systemctl start dynamicdnswatcher.service
+
+exit 0

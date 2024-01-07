@@ -1,0 +1,17 @@
+# Contents of /etc/systemd/system/dynamicdnswatcher.service
+[Unit]
+Description=DynamicDNSWatcher service
+After=multi-user.target
+# Requires=time-set.target
+StartLimitBurst=10
+StartLimitIntervalSec=33
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+ExecStart=/usr/local/bin/dynamicdnswatcher -v 0 -f /var/log/dynamicdnswatcher.txt -o /var/www/html/dynamicdnswatcher-%H.html
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target
