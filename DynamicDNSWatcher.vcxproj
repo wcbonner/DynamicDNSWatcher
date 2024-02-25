@@ -83,7 +83,8 @@
     <WSLPath>Debian</WSLPath>
   </PropertyGroup>
   <ItemGroup>
-    <ClCompile Include="DynamicDNSWatcher.cpp" />
+    <ClCompile Include="dynamicdnswatcher.cpp" />
+    <ClCompile Include="wimiso8601.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="dynamicdnswatcher.service" />
@@ -95,6 +96,9 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="wimiso8601.h" />
   </ItemGroup>
   <ItemDefinitionGroup />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

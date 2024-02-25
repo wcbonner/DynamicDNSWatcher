@@ -42,7 +42,7 @@ if (CMAKE_VERSION VERSION_GREATER 3.22)
 endif()
 
 project (DynamicDNSWatcher
-    VERSION 1.20240107.1
+    VERSION 1.20240225.0
     DESCRIPTION "queries DNS at one minute intervals and records address changes"
     HOMEPAGE_URL https://github.com/wcbonner/DynamicDNSWatcher
 )
@@ -50,7 +50,7 @@ project (DynamicDNSWatcher
 # configure_file(dynamicdnswatcher-version.h.in dynamicdnswatcher-version.h)
 
 # Add source to this project's executable.
-add_executable (dynamicdnswatcher dynamicdnswatcher.cpp)
+add_executable (dynamicdnswatcher dynamicdnswatcher.cpp wimiso8601.cpp)
 #target_link_libraries(goveebttemplogger -lbluetooth -lstdc++fs)
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)

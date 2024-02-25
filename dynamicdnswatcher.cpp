@@ -39,95 +39,11 @@
 #include <sstream>
 #include <vector>
 #include <utility>
+#include "wimiso8601.h"
 /////////////////////////////////////////////////////////////////////////////
-static const std::string ProgramVersionString("DynamicDNSWatcher 1.20230203-1 Built " __DATE__ " at " __TIME__);
+static const std::string ProgramVersionString("DynamicDNSWatcher 1.20240225-0 Built " __DATE__ " at " __TIME__);
 int ConsoleVerbosity = 1;
 /////////////////////////////////////////////////////////////////////////////
-std::string timeToISO8601(const time_t& TheTime)
-{
-    std::ostringstream ISOTime;
-    if (TheTime > 0)
-    {
-        struct tm UTC;
-        if (0 != gmtime_r(&TheTime, &UTC))
-        {
-            ISOTime.fill('0');
-            if (!((UTC.tm_year == 70) && (UTC.tm_mon == 0) && (UTC.tm_mday == 1)))
-            {
-                ISOTime << UTC.tm_year + 1900 << "-";
-                ISOTime.width(2);
-                ISOTime << UTC.tm_mon + 1 << "-";
-                ISOTime.width(2);
-                ISOTime << UTC.tm_mday << "T";
-            }
-            ISOTime.width(2);
-            ISOTime << UTC.tm_hour << ":";
-            ISOTime.width(2);
-            ISOTime << UTC.tm_min << ":";
-            ISOTime.width(2);
-            ISOTime << UTC.tm_sec;
-        }
-    }
-    return(ISOTime.str());
-}
-time_t ISO8601totime(const std::string& ISOTime)
-{
-    if (ISOTime.length() < 19)
-        return(0);
-    struct tm UTC;
-    UTC.tm_year = stoi(ISOTime.substr(0, 4)) - 1900;
-    UTC.tm_mon = stoi(ISOTime.substr(5, 2)) - 1;
-    UTC.tm_mday = stoi(ISOTime.substr(8, 2));
-    UTC.tm_hour = stoi(ISOTime.substr(11, 2));
-    UTC.tm_min = stoi(ISOTime.substr(14, 2));
-    UTC.tm_sec = stoi(ISOTime.substr(17, 2));
-    UTC.tm_gmtoff = 0;
-    UTC.tm_isdst = -1;
-    UTC.tm_zone = 0;
-#ifdef _MSC_VER
-    _tzset();
-    _get_daylight(&(UTC.tm_isdst));
-#endif
-# ifdef __USE_MISC
-    time_t timer = timegm(&UTC);
-#else
-    time_t timer = mktime(&UTC);
-    timer -= timezone; // HACK: Works in my initial testing on the raspberry pi, but it's currently not DST
-#endif
-#ifdef _MSC_VER
-    long Timezone_seconds = 0;
-    _get_timezone(&Timezone_seconds);
-    timer -= Timezone_seconds;
-    int DST_hours = 0;
-    _get_daylight(&DST_hours);
-    long DST_seconds = 0;
-    _get_dstbias(&DST_seconds);
-    timer += DST_hours * DST_seconds;
-#else
-#endif
-    return(timer);
-}
-std::string timeToExcelLocal(const time_t& TheTime)
-{
-    std::ostringstream ExcelDate;
-    struct tm UTC;
-    if (0 != localtime_r(&TheTime, &UTC))
-    {
-        ExcelDate.fill('0');
-        ExcelDate << UTC.tm_year + 1900 << "-";
-        ExcelDate.width(2);
-        ExcelDate << UTC.tm_mon + 1 << "-";
-        ExcelDate.width(2);
-        ExcelDate << UTC.tm_mday << " ";
-        ExcelDate.width(2);
-        ExcelDate << UTC.tm_hour << ":";
-        ExcelDate.width(2);
-        ExcelDate << UTC.tm_min << ":";
-        ExcelDate.width(2);
-        ExcelDate << UTC.tm_sec;
-    }
-    return(ExcelDate.str());
-}
 std::string getTimeExcelLocal(void)
 {
     time_t timer;
