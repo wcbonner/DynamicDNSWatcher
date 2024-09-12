@@ -42,7 +42,7 @@ if (CMAKE_VERSION VERSION_GREATER 3.22)
 endif()
 
 project (DynamicDNSWatcher
-    VERSION 1.20240225.0
+    VERSION 1.20240912.0
     DESCRIPTION "queries DNS at one minute intervals and records address changes"
     HOMEPAGE_URL https://github.com/wcbonner/DynamicDNSWatcher
 )

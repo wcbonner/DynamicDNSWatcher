@@ -1,6 +1,9 @@
 #!/bin/sh
 
-echo "$(tput setaf 3) HI I'M A POSTINST SCRIPT `date +"%s"`$(tput sgr0)"
+echo "$(tput setaf 3) HI I'M A POSTINST SCRIPT `date --rfc-3339='seconds'`$(tput sgr0)"
+adduser --system --ingroup www-data dynamicdnswatcher
+mkdir --mode 0775 --parents /var/cache/dynamicdnswatcher
+chown --recursive dynamicdnswatcher:www-data /var/cache/dynamicdnswatcher
 systemctl daemon-reload
 systemctl enable dynamicdnswatcher.service
 systemctl start dynamicdnswatcher.service
