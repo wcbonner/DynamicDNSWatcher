@@ -1,7 +1,8 @@
 # Contents of /etc/systemd/system/dynamicdnswatcher.service
 [Unit]
 Description=DynamicDNSWatcher service
-After=multi-user.target
+After=multi-user.target network-online.target
+Wants=network-online.target
 # Requires=time-set.target
 StartLimitBurst=10
 StartLimitIntervalSec=33
